@@ -13,7 +13,7 @@ A web application to copy hotel room type rates from the current year to future 
 ## Prerequisites
 
 - Python 3.11+
-- Cloudbeds API Bearer Token
+- Cloudbeds API Token
 - Property ID from your Cloudbeds account
 
 ## Local Setup
@@ -131,11 +131,11 @@ heroku logs --tail
 
 ## Environment Variables
 
-The Bearer Token can be entered directly in the UI or set as an environment variable:
+The API Token can be entered directly in the UI or set as an environment variable:
 
 | Variable | Description | Required |
 |----------|-------------|----------|
-| `CLOUDBEDS_TOKEN` | Your Cloudbeds API Bearer Token (optional - can be entered in UI) | No |
+| `CLOUDBEDS_TOKEN` | Your Cloudbeds API Token (optional - can be entered in UI) | No |
 | `PORT` | Port number (set automatically by Heroku) | No |
 
 **Note:** For production/Heroku deployment, it's recommended to set `CLOUDBEDS_TOKEN` as an environment variable for security. For local development, you can simply enter it in the web interface.
@@ -172,21 +172,6 @@ rate_copier/
 
 **Issue**: "Bearer token not found"
 - **Solution**: Set the `CLOUDBEDS_TOKEN` environment variable
-
-### Heroku Deployment
-
-**Issue**: Application crashes on Heroku
-- **Solution**: Check logs with `heroku logs --tail`
-- Verify environment variables are set: `heroku config`
-
-**Issue**: "No web processes running"
-- **Solution**: Scale your dynos: `heroku ps:scale web=1`
-
-## Security Notes
-
-- Never commit your `.env` file or Bearer token to Git
-- The `.gitignore` file is configured to exclude sensitive files
-- Always use environment variables for API credentials
 
 ## API Rate Limits
 
