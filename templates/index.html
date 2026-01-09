@@ -581,7 +581,6 @@
             const tbody = document.getElementById('previewTableBody');
             tbody.innerHTML = '';
 
-            let opIndex = 0;
             Object.values(groupedOps).forEach(group => {
                 const roomType = roomTypesData.find(rt => rt.roomTypeID === group.roomTypeID);
                 const sourceDate = new Date(group.sourceDate + 'T00:00:00');
@@ -611,6 +610,15 @@
                         const targetDayName = targetDate.toLocaleDateString('en-US', { weekday: 'short' });
                         const isTargetWeekend = targetDate.getDay() === 5 || targetDate.getDay() === 6;
 
+                        // Find the actual index in pendingOperations array
+                        const opIndex = pendingOperations.findIndex(op =>
+                            op.roomTypeID === yearOp.roomTypeID &&
+                            op.sourceDate === yearOp.sourceDate &&
+                            op.targetDate === yearOp.targetDate &&
+                            op.targetYear === yearOp.targetYear &&
+                            (op.ratePlanID || 'base') === (yearOp.ratePlanID || 'base')
+                        );
+
                         rowHTML += `
                             <td>${formatDate(yearOp.targetDate)} <span class="day-badge ${isTargetWeekend ? 'weekend' : ''}">${targetDayName}</span></td>
                             <td>
@@ -623,7 +631,6 @@
                                        style="width: 80px;">
                             </td>
                         `;
-                        opIndex++;
                     } else {
                         rowHTML += '<td>-</td><td>-</td>';
                     }
