@@ -87,48 +87,6 @@ git branch -M main
 git push -u origin main
 ```
 
-## Heroku Deployment
-
-### 1. Install Heroku CLI
-
-Download and install from [Heroku CLI](https://devcenter.heroku.com/articles/heroku-cli)
-
-### 2. Login to Heroku
-
-```bash
-heroku login
-```
-
-### 3. Create Heroku app
-
-```bash
-heroku create your-app-name
-```
-
-### 4. Set environment variables
-
-```bash
-heroku config:set CLOUDBEDS_TOKEN=your_bearer_token_here
-```
-
-### 5. Deploy to Heroku
-
-```bash
-git push heroku main
-```
-
-### 6. Open your application
-
-```bash
-heroku open
-```
-
-### 7. View logs (if needed)
-
-```bash
-heroku logs --tail
-```
-
 ## Environment Variables
 
 The API Token can be entered directly in the UI or set as an environment variable:
@@ -136,9 +94,9 @@ The API Token can be entered directly in the UI or set as an environment variabl
 | Variable | Description | Required |
 |----------|-------------|----------|
 | `CLOUDBEDS_TOKEN` | Your Cloudbeds API Token (optional - can be entered in UI) | No |
-| `PORT` | Port number (set automatically by Heroku) | No |
+| `PORT` | Port number | No |
 
-**Note:** For production/Heroku deployment, it's recommended to set `CLOUDBEDS_TOKEN` as an environment variable for security. For local development, you can simply enter it in the web interface.
+**Note:** For production deployment, it's recommended to set `CLOUDBEDS_TOKEN` as an environment variable for security. For local development, you can simply enter it in the web interface.
 
 ## API Endpoints Used
 

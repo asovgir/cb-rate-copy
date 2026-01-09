@@ -73,10 +73,10 @@ def get_rate(property_id, room_type_id, date, bearer_token):
         print(f"[ERROR] Error fetching rate: {e}")
         return None
 
-def get_rates_batch(property_id, room_type_id, start_date, end_date, bearer_token):
+def get_rates_batch(property_id, room_type_id, start_date, end_date, bearer_token, rate_plan_id=None):
     """Fetch rates for a date range using getRatePlans (supports historical dates)"""
     url = f"{API_BASE_URL}/getRatePlans"
-    
+
     params = {
         'propertyID': property_id,
         'roomTypeID': room_type_id,
@@ -84,6 +84,9 @@ def get_rates_batch(property_id, room_type_id, start_date, end_date, bearer_toke
         'endDate': end_date,
         'detailedRates': 'true'  # Get daily rates including historical
     }
+
+    if rate_plan_id:
+        params['ratePlanID'] = rate_plan_id
     
     try:
         print(f"[BATCH LOAD] Fetching rate plans for roomType {room_type_id} from {start_date} to {end_date}")
@@ -244,15 +247,53 @@ def api_get_room_types():
     """API endpoint to get room types for a property"""
     property_id = request.args.get('propertyID')
     bearer_token = request.headers.get('X-Bearer-Token')
-    
+
     if not property_id:
         return jsonify({'error': 'propertyID is required'}), 400
-    
+
     if not bearer_token:
         return jsonify({'error': 'Bearer token is required'}), 401
-    
+
     room_types = get_room_types(property_id, bearer_token)
     return jsonify({'success': True, 'roomTypes': room_types})
+
+@app.route('/api/rate-plans', methods=['GET'])
+def api_get_rate_plans():
+    """API endpoint to get rate plans for a room type"""
+    property_id = request.args.get('propertyID')
+    room_type_id = request.args.get('roomTypeID')
+    start_date = request.args.get('startDate')
+    end_date = request.args.get('endDate')
+    bearer_token = request.headers.get('X-Bearer-Token')
+
+    if not all([property_id, room_type_id, start_date, end_date]):
+        return jsonify({'error': 'propertyID, roomTypeID, startDate, and endDate are required'}), 400
+
+    if not bearer_token:
+        return jsonify({'error': 'Bearer token is required'}), 401
+
+    try:
+        url = f"{API_BASE_URL}/getRatePlans"
+        params = {
+            'propertyID': property_id,
+            'roomTypeID': room_type_id,
+            'startDate': start_date,
+            'endDate': end_date
+        }
+
+        response = requests.get(url, headers=get_headers(bearer_token), params=params)
+        response.raise_for_status()
+        data = response.json()
+
+        if data.get('success'):
+            rate_plans = data.get('data', [])
+            return jsonify({'success': True, 'ratePlans': rate_plans})
+        else:
+            return jsonify({'success': False, 'error': data.get('message', 'Unknown error')})
+
+    except Exception as e:
+        print(f"[ERROR] Error fetching rate plans: {e}")
+        return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/rates', methods=['GET'])
 def api_get_rates():
@@ -280,18 +321,19 @@ def api_get_rates_batch():
     """API endpoint to get rates for a date range"""
     property_id = request.args.get('propertyID')
     room_type_id = request.args.get('roomTypeID')
+    rate_plan_id = request.args.get('ratePlanID')  # Optional
     start_date = request.args.get('startDate')
     end_date = request.args.get('endDate')
     bearer_token = request.headers.get('X-Bearer-Token')
-    
+
     if not all([property_id, room_type_id, start_date, end_date]):
         return jsonify({'error': 'propertyID, roomTypeID, startDate, and endDate are required'}), 400
-    
+
     if not bearer_token:
         return jsonify({'error': 'Bearer token is required'}), 401
-    
-    rates = get_rates_batch(property_id, room_type_id, start_date, end_date, bearer_token)
-    
+
+    rates = get_rates_batch(property_id, room_type_id, start_date, end_date, bearer_token, rate_plan_id)
+
     return jsonify({
         'success': True,
         'rates': rates,

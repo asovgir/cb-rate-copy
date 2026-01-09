@@ -10,10 +10,6 @@
     <div class="container">
         <header>
             <h1>🏨 Cloudbeds Rate Copier</h1>
-            <div class="view-toggle">
-                <button class="toggle-btn active" onclick="switchView('basic')">Basic View</button>
-                <button class="toggle-btn" onclick="switchView('advanced')">Advanced View</button>
-            </div>
         </header>
 
         <div class="config-panel">
@@ -37,7 +33,7 @@
             <p>Loading...</p>
         </div>
 
-        <!-- BASIC VIEW -->
+        <!-- MAIN VIEW -->
         <div id="basicView" style="display: none;">
             <div class="basic-container">
                 <div class="basic-section">
@@ -64,7 +60,15 @@
                 </div>
 
                 <div class="basic-section">
-                    <h3>3. Years to Copy TO</h3>
+                    <h3>3. Select Rate Plans</h3>
+                    <div class="rate-plan-selector">
+                        <button class="btn-small" onclick="loadRatePlans()">Load Rate Plans</button>
+                        <div id="ratePlanCheckboxes" class="checkbox-grid" style="display: none; margin-top: 10px;"></div>
+                    </div>
+                </div>
+
+                <div class="basic-section">
+                    <h3>4. Years to Copy TO</h3>
                     <div class="year-selector">
                         <label class="checkbox-label">
                             <input type="checkbox" value="2026" class="basic-year-checkbox">
@@ -98,47 +102,6 @@
             </div>
         </div>
 
-        <!-- ADVANCED VIEW -->
-        <div id="advancedView" style="display: none;">
-            <div class="advanced-header">
-                <div class="room-type-multi-select">
-                    <label>Room Types (hold Ctrl/Cmd for multiple):</label>
-                    <select id="advancedRoomTypeSelect" multiple size="8"></select>
-                    <div class="select-buttons">
-                        <button class="btn-small" onclick="selectAllAdvancedRoomTypes()">Select All</button>
-                        <button class="btn-small" onclick="clearAllAdvancedRoomTypes()">Clear</button>
-                    </div>
-                </div>
-                
-                <div class="date-range-controls">
-                    <label>Date Range:</label>
-                    <input type="date" id="advancedStartDate" value="2025-12-01">
-                    <span>to</span>
-                    <input type="date" id="advancedEndDate" value="2025-12-31">
-                    <button class="btn btn-primary" onclick="loadAdvancedRates()">Load Rates</button>
-                </div>
-            </div>
-
-            <div id="spreadsheetContainer" style="display: none;">
-                <div class="toolbar">
-                    <button class="btn-small" onclick="selectAllYears()">Select All Years</button>
-                    <button class="btn-small" onclick="clearAllYears()">Clear All</button>
-                    <button class="btn-small" onclick="selectWeekends()">Select Weekends</button>
-                    <button class="btn-small" onclick="selectWeekdays()">Select Weekdays</button>
-                    <button class="btn btn-primary" onclick="copySelectedRates()">Preview Rate Changes</button>
-                    <span id="selectionCount" class="selection-info"></span>
-                </div>
-                
-                <div class="warning-box">
-                    ⚠️ <strong>Day-of-Week Matching:</strong> Saturday Dec 13, 2025 will copy to Saturday Dec 12, 2026 (matching day of week, not calendar date)
-                </div>
-                
-                <div class="spreadsheet-wrapper">
-                    <div id="spreadsheetContent"></div>
-                </div>
-            </div>
-        </div>
-
         <div id="resultsPanel" style="display: none;">
             <div class="results-header">
                 <h3>Results</h3>
@@ -154,22 +117,33 @@
                     <h2>Review & Confirm Rate Changes</h2>
                     <button class="btn-close" onclick="closePreview()">×</button>
                 </div>
-                
+
                 <div class="modal-body">
                     <div class="preview-summary"></div>
+
+                    <div class="preview-filters" style="margin-bottom: 15px; padding: 12px; background: #f5f5f5; border: 1px solid #d0d0d0; border-radius: 4px;">
+                        <div style="display: flex; gap: 15px; align-items: flex-end;">
+                            <div style="flex: 1;">
+                                <label style="font-size: 10px; font-weight: 600; display: block; margin-bottom: 3px;">Filter by Room Type:</label>
+                                <select id="filterRoomType" onchange="applyPreviewFilters()" style="width: 100%; padding: 5px; border: 1px solid #ababab; font-size: 11px;">
+                                    <option value="">All Room Types</option>
+                                </select>
+                            </div>
+                            <div style="flex: 1;">
+                                <label style="font-size: 10px; font-weight: 600; display: block; margin-bottom: 3px;">Filter by Rate Plan:</label>
+                                <select id="filterRatePlan" onchange="applyPreviewFilters()" style="width: 100%; padding: 5px; border: 1px solid #ababab; font-size: 11px;">
+                                    <option value="">All Rate Plans</option>
+                                </select>
+                            </div>
+                            <button class="btn-small" onclick="clearPreviewFilters()" style="padding: 5px 12px;">Clear Filters</button>
+                        </div>
+                        <div id="filterStats" style="margin-top: 8px; font-size: 10px; color: #666;"></div>
+                    </div>
+
                     <div class="preview-table-wrapper">
                         <table class="preview-table" id="previewTable">
-                            <thead>
-                                <tr>
-                                    <th>Room Type</th>
-                                    <th>Source Date</th>
-                                    <th>Source Day</th>
-                                    <th>Source Rate</th>
-                                    <th>→</th>
-                                    <th>Target Date</th>
-                                    <th>Target Day</th>
-                                    <th>New Rate (editable)</th>
-                                </tr>
+                            <thead id="previewTableHead">
+                                <!-- Dynamic headers will be inserted here -->
                             </thead>
                             <tbody id="previewTableBody"></tbody>
                         </table>
@@ -203,29 +177,16 @@
     </div>
 
     <script>
-        let currentView = 'basic';
         let currentPropertyID = '';
         let currentBearerToken = '';
         let roomTypesData = [];
-        let ratesData = {};
-        let isSelecting = false;
-        let selectionState = false;
+        let ratePlansData = [];
         let pendingOperations = [];
 
-        function switchView(view) {
-            currentView = view;
-            document.querySelectorAll('.toggle-btn').forEach(btn => btn.classList.remove('active'));
-            event.target.classList.add('active');
-            
-            document.getElementById('basicView').style.display = view === 'basic' ? 'block' : 'none';
-            document.getElementById('advancedView').style.display = view === 'advanced' ? 'block' : 'none';
-            document.getElementById('resultsPanel').style.display = 'none';
-        }
-
-        function renderBasicRoomTypeCheckboxes() {
+        function renderRoomTypeCheckboxes() {
             const container = document.getElementById('roomTypeCheckboxes');
             container.innerHTML = '';
-            
+
             roomTypesData.forEach(rt => {
                 const label = document.createElement('label');
                 label.className = 'checkbox-label';
@@ -237,16 +198,42 @@
             });
         }
 
-        function renderAdvancedRoomTypeSelect() {
-            const select = document.getElementById('advancedRoomTypeSelect');
-            select.innerHTML = '';
-            
-            roomTypesData.forEach(rt => {
-                const option = document.createElement('option');
-                option.value = rt.roomTypeID;
-                option.textContent = rt.roomTypeName;
-                select.appendChild(option);
+        function renderRatePlanCheckboxes() {
+            const container = document.getElementById('ratePlanCheckboxes');
+            container.innerHTML = '';
+
+            if (ratePlansData.length === 0) {
+                container.innerHTML = '<p style="padding: 10px; color: #666;">No rate plans available</p>';
+                container.style.display = 'block';
+                return;
+            }
+
+            ratePlansData.forEach(rp => {
+                const label = document.createElement('label');
+                label.className = 'checkbox-label';
+
+                // Determine display name - if no ratePlanID, it's the base rate
+                let displayName;
+                if (!rp.ratePlanID) {
+                    displayName = 'Base Rate';
+                } else if (rp.ratePlanNamePublic) {
+                    displayName = rp.ratePlanNamePublic;
+                } else if (rp.ratePlanNamePrivate) {
+                    displayName = rp.ratePlanNamePrivate;
+                } else {
+                    displayName = `Rate Plan ${rp.ratePlanID}`;
+                }
+
+                const planId = rp.ratePlanID || 'base';
+
+                label.innerHTML = `
+                    <input type="checkbox" class="rate-plan-checkbox" value="${planId}" data-rate-id="${rp.rateID}">
+                    <span>${displayName}</span>
+                `;
+                container.appendChild(label);
             });
+
+            container.style.display = 'block';
         }
 
         async function loadRoomTypes() {
@@ -276,15 +263,8 @@
                 }
 
                 roomTypesData = data.roomTypes;
-                
-                if (currentView === 'basic') {
-                    renderBasicRoomTypeCheckboxes();
-                    document.getElementById('basicView').style.display = 'block';
-                } else {
-                    renderAdvancedRoomTypeSelect();
-                    document.getElementById('advancedView').style.display = 'block';
-                }
-                
+                renderRoomTypeCheckboxes();
+                document.getElementById('basicView').style.display = 'block';
                 showLoading(false);
             } catch (error) {
                 console.error('Error:', error);
@@ -301,15 +281,52 @@
             document.querySelectorAll('.room-type-checkbox').forEach(cb => cb.checked = false);
         }
 
-        function selectAllAdvancedRoomTypes() {
-            const select = document.getElementById('advancedRoomTypeSelect');
-            for (let i = 0; i < select.options.length; i++) {
-                select.options[i].selected = true;
-            }
-        }
+        async function loadRatePlans() {
+            const selectedRoomTypes = Array.from(document.querySelectorAll('.room-type-checkbox:checked'))
+                .map(cb => cb.value);
+            const startDate = document.getElementById('basicFromStart').value;
+            const endDate = document.getElementById('basicFromEnd').value;
 
-        function clearAllAdvancedRoomTypes() {
-            document.getElementById('advancedRoomTypeSelect').selectedIndex = -1;
+            if (selectedRoomTypes.length === 0) {
+                alert('Please select at least one room type first');
+                return;
+            }
+
+            if (!startDate || !endDate) {
+                alert('Please select date range first');
+                return;
+            }
+
+            if (!currentBearerToken || !currentPropertyID) {
+                alert('Please load room types first');
+                return;
+            }
+
+            showLoading(true);
+            ratePlansData = [];
+
+            try {
+                // Fetch rate plans for the first selected room type
+                const roomTypeID = selectedRoomTypes[0];
+                const response = await fetch(
+                    `/api/rate-plans?propertyID=${currentPropertyID}&roomTypeID=${roomTypeID}&startDate=${startDate}&endDate=${endDate}`,
+                    { headers: { 'X-Bearer-Token': currentBearerToken } }
+                );
+                const data = await response.json();
+
+                if (data.success && data.ratePlans) {
+                    ratePlansData = data.ratePlans;
+                    renderRatePlanCheckboxes();
+                } else {
+                    alert('Error loading rate plans: ' + (data.error || 'Unknown error'));
+                }
+
+                showLoading(false);
+            } catch (error) {
+                console.error('Error loading rate plans:', error);
+                alert('Error loading rate plans');
+                showLoading(false);
+            }
         }
 
         function getDayOfWeekMatch(sourceDate, targetYear) {
@@ -335,6 +352,8 @@
         async function executeBasicCopy() {
             const selectedRoomTypes = Array.from(document.querySelectorAll('.room-type-checkbox:checked'))
                 .map(cb => cb.value);
+            const selectedRatePlans = Array.from(document.querySelectorAll('.rate-plan-checkbox:checked'))
+                .map(cb => ({ ratePlanID: cb.value, rateID: cb.dataset.rateId }));
             const selectedYears = Array.from(document.querySelectorAll('.basic-year-checkbox:checked'))
                 .map(cb => parseInt(cb.value));
             const fromStart = document.getElementById('basicFromStart').value;
@@ -342,6 +361,11 @@
 
             if (selectedRoomTypes.length === 0) {
                 alert('Please select at least one room type');
+                return;
+            }
+
+            if (selectedRatePlans.length === 0) {
+                alert('Please select at least one rate plan');
                 return;
             }
 
@@ -357,42 +381,45 @@
 
             showLoading(true);
             const operations = [];
-            
+
             document.getElementById('basicSummary').textContent = 'Loading rates (batched)...';
 
-            // Load rates in batches by room type
+            // Load rates in batches by room type and rate plan
             for (const roomTypeID of selectedRoomTypes) {
-                try {
-                    console.log(`[BATCH LOAD] Fetching rates for room type ${roomTypeID}`);
-                    
-                    const response = await fetch(
-                        `/api/rates-batch?propertyID=${currentPropertyID}&roomTypeID=${roomTypeID}&startDate=${fromStart}&endDate=${fromEnd}`,
-                        { headers: { 'X-Bearer-Token': currentBearerToken } }
-                    );
-                    const data = await response.json();
-                    
-                    if (data.success && data.rates) {
-                        console.log(`[BATCH LOAD] Loaded ${data.count} rates for room type ${roomTypeID}`);
-                        
-                        // Process each date in the batch response
-                        Object.keys(data.rates).forEach(date => {
-                            const rate = data.rates[date];
-                            
-                            // Create operations for each selected year
-                            for (const year of selectedYears) {
-                                const targetDate = getDayOfWeekMatch(date, year);
-                                operations.push({
-                                    roomTypeID,
-                                    sourceDate: date,
-                                    targetDate: targetDate,
-                                    targetYear: year,
-                                    rateData: rate
-                                });
-                            }
-                        });
+                for (const ratePlan of selectedRatePlans) {
+                    try {
+                        console.log(`[BATCH LOAD] Fetching rates for room type ${roomTypeID}, rate plan ${ratePlan.ratePlanID}`);
+
+                        const response = await fetch(
+                            `/api/rates-batch?propertyID=${currentPropertyID}&roomTypeID=${roomTypeID}&ratePlanID=${ratePlan.ratePlanID}&startDate=${fromStart}&endDate=${fromEnd}`,
+                            { headers: { 'X-Bearer-Token': currentBearerToken } }
+                        );
+                        const data = await response.json();
+
+                        if (data.success && data.rates) {
+                            console.log(`[BATCH LOAD] Loaded ${data.count} rates for room type ${roomTypeID}, rate plan ${ratePlan.ratePlanID}`);
+
+                            // Process each date in the batch response
+                            Object.keys(data.rates).forEach(date => {
+                                const rate = data.rates[date];
+
+                                // Create operations for each selected year
+                                for (const year of selectedYears) {
+                                    const targetDate = getDayOfWeekMatch(date, year);
+                                    operations.push({
+                                        roomTypeID,
+                                        ratePlanID: ratePlan.ratePlanID,
+                                        sourceDate: date,
+                                        targetDate: targetDate,
+                                        targetYear: year,
+                                        rateData: rate
+                                    });
+                                }
+                            });
+                        }
+                    } catch (error) {
+                        console.error(`[BATCH LOAD] Error loading rates for room type ${roomTypeID}, rate plan ${ratePlan.ratePlanID}:`, error);
                     }
-                } catch (error) {
-                    console.error(`[BATCH LOAD] Error loading rates for room type ${roomTypeID}:`, error);
                 }
             }
 
@@ -408,342 +435,213 @@
             showPreview(operations);
         }
 
-        async function loadAdvancedRates() {
-            const select = document.getElementById('advancedRoomTypeSelect');
-            const selectedRoomTypes = Array.from(select.selectedOptions).map(opt => opt.value);
-            const startDate = document.getElementById('advancedStartDate').value;
-            const endDate = document.getElementById('advancedEndDate').value;
+        let allGroupedOps = {};  // Store all operations globally for filtering
 
-            if (selectedRoomTypes.length === 0) {
-                alert('Please select at least one room type');
-                return;
-            }
+        function showPreview(operations) {
+            pendingOperations = operations;
 
-            showLoading(true);
-            ratesData = {};
-            const dates = getDateRange(startDate, endDate);
+            // Group operations by unique combinations of roomType, sourceDate, ratePlan
+            const groupedOps = {};
+            const selectedYears = [...new Set(operations.map(op => op.targetYear))].sort();
 
-            // Initialize ratesData structure for all room types and dates
-            for (const roomTypeID of selectedRoomTypes) {
-                ratesData[roomTypeID] = {};
-                dates.forEach(date => {
-                    ratesData[roomTypeID][date] = {
-                        amount: null,
-                        data: null,
-                        selected: { 2026: false, 2027: false, 2028: false, 2029: false }
+            operations.forEach(op => {
+                const key = `${op.roomTypeID}_${op.sourceDate}_${op.ratePlanID || 'base'}`;
+                if (!groupedOps[key]) {
+                    groupedOps[key] = {
+                        roomTypeID: op.roomTypeID,
+                        ratePlanID: op.ratePlanID,
+                        sourceDate: op.sourceDate,
+                        rateData: op.rateData,
+                        years: {}
                     };
-                });
-            }
-
-            // Load rates in batches by room type
-            for (const roomTypeID of selectedRoomTypes) {
-                try {
-                    console.log(`[BATCH LOAD] Fetching rates for room type ${roomTypeID}`);
-                    
-                    const response = await fetch(
-                        `/api/rates-batch?propertyID=${currentPropertyID}&roomTypeID=${roomTypeID}&startDate=${startDate}&endDate=${endDate}`,
-                        { headers: { 'X-Bearer-Token': currentBearerToken } }
-                    );
-                    const data = await response.json();
-                    
-                    if (data.success && data.rates) {
-                        console.log(`[BATCH LOAD] Loaded ${data.count} rates for room type ${roomTypeID}`);
-                        
-                        // Process each date in the batch response
-                        Object.keys(data.rates).forEach(date => {
-                            const rate = data.rates[date];
-                            const rateAmount = rate.rate || rate.roomRate || rate.totalRate || '0.00';
-                            
-                            if (ratesData[roomTypeID][date]) {
-                                ratesData[roomTypeID][date] = {
-                                    amount: rateAmount,
-                                    data: rate,
-                                    selected: { 2026: false, 2027: false, 2028: false, 2029: false }
-                                };
-                            }
-                        });
-                    }
-                } catch (error) {
-                    console.error(`[BATCH LOAD] Error loading rates for room type ${roomTypeID}:`, error);
                 }
-            }
-
-            renderAdvancedSpreadsheet(selectedRoomTypes, startDate, endDate);
-            document.getElementById('spreadsheetContainer').style.display = 'block';
-            showLoading(false);
-        }
-
-        function renderAdvancedSpreadsheet(roomTypeIDs, startDate, endDate) {
-            const dates = getDateRange(startDate, endDate);
-            
-            let html = `<table class="spreadsheet">
-                <thead>
-                    <tr>
-                        <th class="date-col">Date</th>
-                        <th class="day-col">Day</th>
-                        <th class="roomtype-col">Room Type</th>
-                        <th class="rate-col">Source Rate</th>
-                        <th class="year-col">2026</th>
-                        <th class="year-col">2027</th>
-                        <th class="year-col">2028</th>
-                        <th class="year-col">2029</th>
-                    </tr>
-                </thead>
-                <tbody>`;
-
-            dates.forEach(date => {
-                const dateObj = new Date(date + 'T00:00:00');
-                const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
-                
-                roomTypeIDs.forEach(roomTypeID => {
-                    const roomType = roomTypesData.find(rt => rt.roomTypeID === roomTypeID);
-                    const rate = ratesData[roomTypeID]?.[date];
-                    const hasRate = rate && rate.amount;
-                    const rateDisplay = hasRate ? `$${parseFloat(rate.amount).toFixed(2)}` : '-';
-
-                    html += `<tr class="${hasRate ? '' : 'no-rate'}">
-                        <td class="date-cell">${formatDate(date)}</td>
-                        <td class="day-cell ${isWeekend(dateObj) ? 'weekend' : ''}">${dayName}</td>
-                        <td class="roomtype-cell">${roomType.roomTypeName}</td>
-                        <td class="rate-cell">${rateDisplay}</td>
-                        <td class="checkbox-cell">
-                            <input type="checkbox" 
-                                   ${hasRate ? '' : 'disabled'} 
-                                   data-room="${roomTypeID}" 
-                                   data-date="${date}" 
-                                   data-year="2026"
-                                   onchange="toggleYear('${roomTypeID}', '${date}', 2026, this.checked)"
-                                   onmousedown="startSelection(event)"
-                                   onmouseenter="continueSelection(event)">
-                        </td>
-                        <td class="checkbox-cell">
-                            <input type="checkbox" 
-                                   ${hasRate ? '' : 'disabled'} 
-                                   data-room="${roomTypeID}" 
-                                   data-date="${date}" 
-                                   data-year="2027"
-                                   onchange="toggleYear('${roomTypeID}', '${date}', 2027, this.checked)"
-                                   onmousedown="startSelection(event)"
-                                   onmouseenter="continueSelection(event)">
-                        </td>
-                        <td class="checkbox-cell">
-                            <input type="checkbox" 
-                                   ${hasRate ? '' : 'disabled'} 
-                                   data-room="${roomTypeID}" 
-                                   data-date="${date}" 
-                                   data-year="2028"
-                                   onchange="toggleYear('${roomTypeID}', '${date}', 2028, this.checked)"
-                                   onmousedown="startSelection(event)"
-                                   onmouseenter="continueSelection(event)">
-                        </td>
-                        <td class="checkbox-cell">
-                            <input type="checkbox" 
-                                   ${hasRate ? '' : 'disabled'} 
-                                   data-room="${roomTypeID}" 
-                                   data-date="${date}" 
-                                   data-year="2029"
-                                   onchange="toggleYear('${roomTypeID}', '${date}', 2029, this.checked)"
-                                   onmousedown="startSelection(event)"
-                                   onmouseenter="continueSelection(event)">
-                        </td>
-                    </tr>`;
-                });
+                groupedOps[key].years[op.targetYear] = op;
             });
 
-            html += `</tbody></table>`;
-            document.getElementById('spreadsheetContent').innerHTML = html;
-            
-            document.addEventListener('mouseup', stopSelection);
-            updateSelectionCount();
+            allGroupedOps = groupedOps;  // Store for filtering
+
+            const summary = document.querySelector('.preview-summary');
+            summary.textContent = `Ready to copy ${operations.length} rate(s). Review and edit rates below before submitting.`;
+
+            // Populate filter dropdowns
+            populatePreviewFilters(groupedOps);
+
+            // Render the preview table
+            renderPreviewTable(groupedOps, selectedYears);
+
+            document.getElementById('previewModal').style.display = 'flex';
         }
 
-        function startSelection(event) {
-            if (event.target.disabled) return;
-            isSelecting = true;
-            selectionState = event.target.checked;
+        function populatePreviewFilters(groupedOps) {
+            // Get unique room types and rate plans from the operations
+            const uniqueRoomTypes = new Set();
+            const uniqueRatePlans = new Set();
+
+            Object.values(groupedOps).forEach(group => {
+                uniqueRoomTypes.add(group.roomTypeID);
+                uniqueRatePlans.add(group.ratePlanID || 'base');
+            });
+
+            // Populate room type filter
+            const roomTypeSelect = document.getElementById('filterRoomType');
+            roomTypeSelect.innerHTML = '<option value="">All Room Types</option>';
+            uniqueRoomTypes.forEach(roomTypeID => {
+                const roomType = roomTypesData.find(rt => rt.roomTypeID === roomTypeID);
+                if (roomType) {
+                    const option = document.createElement('option');
+                    option.value = roomTypeID;
+                    option.textContent = roomType.roomTypeName;
+                    roomTypeSelect.appendChild(option);
+                }
+            });
+
+            // Populate rate plan filter
+            const ratePlanSelect = document.getElementById('filterRatePlan');
+            ratePlanSelect.innerHTML = '<option value="">All Rate Plans</option>';
+            uniqueRatePlans.forEach(ratePlanID => {
+                const option = document.createElement('option');
+                option.value = ratePlanID;
+
+                if (ratePlanID === 'base') {
+                    option.textContent = 'Base Rate';
+                } else {
+                    const ratePlan = ratePlansData.find(rp => rp.ratePlanID === ratePlanID);
+                    option.textContent = ratePlan ?
+                        (ratePlan.ratePlanNamePublic || ratePlan.ratePlanNamePrivate || `Plan ${ratePlanID}`) :
+                        `Plan ${ratePlanID}`;
+                }
+                ratePlanSelect.appendChild(option);
+            });
+
+            updateFilterStats(groupedOps, groupedOps);
         }
 
-        function continueSelection(event) {
-            if (!isSelecting || event.target.disabled) return;
-            event.target.checked = selectionState;
-            const roomTypeID = event.target.dataset.room;
-            const date = event.target.dataset.date;
-            const year = parseInt(event.target.dataset.year);
-            toggleYear(roomTypeID, date, year, selectionState);
+        function applyPreviewFilters() {
+            const selectedRoomType = document.getElementById('filterRoomType').value;
+            const selectedRatePlan = document.getElementById('filterRatePlan').value;
+
+            // Filter the grouped operations
+            const filteredOps = {};
+            Object.entries(allGroupedOps).forEach(([key, group]) => {
+                const matchesRoomType = !selectedRoomType || group.roomTypeID === selectedRoomType;
+                const matchesRatePlan = !selectedRatePlan || (group.ratePlanID || 'base') === selectedRatePlan;
+
+                if (matchesRoomType && matchesRatePlan) {
+                    filteredOps[key] = group;
+                }
+            });
+
+            // Get years from all operations
+            const allYears = new Set();
+            Object.values(allGroupedOps).forEach(group => {
+                Object.keys(group.years).forEach(year => allYears.add(parseInt(year)));
+            });
+            const selectedYears = [...allYears].sort();
+
+            // Re-render table with filtered data
+            renderPreviewTable(filteredOps, selectedYears);
+
+            // Update stats
+            updateFilterStats(filteredOps, allGroupedOps);
         }
 
-        function stopSelection() {
-            isSelecting = false;
+        function clearPreviewFilters() {
+            document.getElementById('filterRoomType').value = '';
+            document.getElementById('filterRatePlan').value = '';
+            applyPreviewFilters();
+        }
+
+        function updateFilterStats(filteredOps, allOps) {
+            const filteredCount = Object.keys(filteredOps).length;
+            const totalCount = Object.keys(allOps).length;
+            const statsEl = document.getElementById('filterStats');
+
+            if (filteredCount === totalCount) {
+                statsEl.textContent = `Showing all ${totalCount} record(s)`;
+            } else {
+                statsEl.textContent = `Showing ${filteredCount} of ${totalCount} record(s)`;
+            }
+        }
+
+        function renderPreviewTable(groupedOps, selectedYears) {
+            // Build table headers
+            const thead = document.getElementById('previewTableHead');
+            let headerHTML = '<tr><th>Room Type</th><th>Source Date</th><th>Source Day</th><th>Rate Plan</th><th>Source Rate</th>';
+            selectedYears.forEach(year => {
+                headerHTML += `<th colspan="2" style="text-align: center; background: #1e6139;">${year}</th>`;
+            });
+            headerHTML += '</tr><tr><th colspan="5"></th>';
+            selectedYears.forEach(year => {
+                headerHTML += '<th>Target Date</th><th>New Rate</th>';
+            });
+            headerHTML += '</tr>';
+            thead.innerHTML = headerHTML;
+
+            // Build table body
+            const tbody = document.getElementById('previewTableBody');
+            tbody.innerHTML = '';
+
+            let opIndex = 0;
+            Object.values(groupedOps).forEach(group => {
+                const roomType = roomTypesData.find(rt => rt.roomTypeID === group.roomTypeID);
+                const sourceDate = new Date(group.sourceDate + 'T00:00:00');
+                const sourceDayName = sourceDate.toLocaleDateString('en-US', { weekday: 'short' });
+                const isSourceWeekend = sourceDate.getDay() === 5 || sourceDate.getDay() === 6;
+
+                const ratePlan = ratePlansData.find(rp => rp.ratePlanID === group.ratePlanID);
+                const ratePlanName = ratePlan ?
+                    (ratePlan.ratePlanNamePublic || ratePlan.ratePlanNamePrivate || `Plan ${group.ratePlanID}`) :
+                    'Base Rate';
+
+                const rateAmount = group.rateData.rate || group.rateData.roomRate || group.rateData.totalRate || 0;
+
+                const row = document.createElement('tr');
+                let rowHTML = `
+                    <td>${roomType.roomTypeName}</td>
+                    <td class="source-date">${formatDate(group.sourceDate)}</td>
+                    <td><span class="day-badge ${isSourceWeekend ? 'weekend' : ''}">${sourceDayName}</span></td>
+                    <td>${ratePlanName}</td>
+                    <td>$${parseFloat(rateAmount).toFixed(2)}</td>
+                `;
+
+                selectedYears.forEach(year => {
+                    const yearOp = group.years[year];
+                    if (yearOp) {
+                        const targetDate = new Date(yearOp.targetDate + 'T00:00:00');
+                        const targetDayName = targetDate.toLocaleDateString('en-US', { weekday: 'short' });
+                        const isTargetWeekend = targetDate.getDay() === 5 || targetDate.getDay() === 6;
+
+                        rowHTML += `
+                            <td>${formatDate(yearOp.targetDate)} <span class="day-badge ${isTargetWeekend ? 'weekend' : ''}">${targetDayName}</span></td>
+                            <td>
+                                <input type="number"
+                                       step="0.01"
+                                       min="0"
+                                       value="${parseFloat(rateAmount).toFixed(2)}"
+                                       data-index="${opIndex}"
+                                       onchange="updatePendingRate(${opIndex}, this.value)"
+                                       style="width: 80px;">
+                            </td>
+                        `;
+                        opIndex++;
+                    } else {
+                        rowHTML += '<td>-</td><td>-</td>';
+                    }
+                });
+
+                row.innerHTML = rowHTML;
+                tbody.appendChild(row);
+            });
         }
 
         function isWeekend(date) {
             const day = date.getDay();
-            return day === 0 || day === 6;
-        }
-
-        function selectWeekends() {
-            document.querySelectorAll('.day-cell.weekend').forEach(cell => {
-                const row = cell.parentElement;
-                row.querySelectorAll('input[type="checkbox"]:not(:disabled)').forEach(cb => {
-                    cb.checked = true;
-                    toggleYear(cb.dataset.room, cb.dataset.date, parseInt(cb.dataset.year), true);
-                });
-            });
-            updateSelectionCount();
-        }
-
-        function selectWeekdays() {
-            document.querySelectorAll('.day-cell:not(.weekend)').forEach(cell => {
-                const row = cell.parentElement;
-                row.querySelectorAll('input[type="checkbox"]:not(:disabled)').forEach(cb => {
-                    cb.checked = true;
-                    toggleYear(cb.dataset.room, cb.dataset.date, parseInt(cb.dataset.year), true);
-                });
-            });
-            updateSelectionCount();
-        }
-
-        function getDateRange(start, end) {
-            const dates = [];
-            const current = new Date(start + 'T00:00:00');
-            const endDate = new Date(end + 'T00:00:00');
-
-            while (current <= endDate) {
-                dates.push(current.toISOString().split('T')[0]);
-                current.setDate(current.getDate() + 1);
-            }
-
-            return dates;
+            return day === 5 || day === 6;
         }
 
         function formatDate(dateStr) {
             const date = new Date(dateStr + 'T00:00:00');
             return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-        }
-
-        function toggleYear(roomTypeID, date, year, checked) {
-            if (ratesData[roomTypeID] && ratesData[roomTypeID][date]) {
-                ratesData[roomTypeID][date].selected[year] = checked;
-                updateSelectionCount();
-            }
-        }
-
-        function selectAllYears() {
-            Object.keys(ratesData).forEach(roomTypeID => {
-                Object.keys(ratesData[roomTypeID]).forEach(date => {
-                    if (ratesData[roomTypeID][date].amount) {
-                        [2026, 2027, 2028, 2029].forEach(year => {
-                            ratesData[roomTypeID][date].selected[year] = true;
-                        });
-                    }
-                });
-            });
-            
-            document.querySelectorAll('input[type="checkbox"]:not(:disabled)').forEach(cb => {
-                cb.checked = true;
-            });
-            updateSelectionCount();
-        }
-
-        function clearAllYears() {
-            Object.keys(ratesData).forEach(roomTypeID => {
-                Object.keys(ratesData[roomTypeID]).forEach(date => {
-                    [2026, 2027, 2028, 2029].forEach(year => {
-                        ratesData[roomTypeID][date].selected[year] = false;
-                    });
-                });
-            });
-            
-            document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-                cb.checked = false;
-            });
-            updateSelectionCount();
-        }
-
-        function updateSelectionCount() {
-            let count = 0;
-            Object.values(ratesData).forEach(roomRates => {
-                Object.values(roomRates).forEach(rate => {
-                    count += Object.values(rate.selected).filter(Boolean).length;
-                });
-            });
-            document.getElementById('selectionCount').textContent = 
-                count > 0 ? `${count} rate(s) selected` : '';
-        }
-
-        async function copySelectedRates() {
-            const operations = [];
-            
-            Object.keys(ratesData).forEach(roomTypeID => {
-                Object.keys(ratesData[roomTypeID]).forEach(date => {
-                    const rate = ratesData[roomTypeID][date];
-                    Object.keys(rate.selected).forEach(year => {
-                        if (rate.selected[year]) {
-                            const targetDate = getDayOfWeekMatch(date, parseInt(year));
-                            operations.push({
-                                roomTypeID,
-                                sourceDate: date,
-                                targetDate: targetDate,
-                                targetYear: parseInt(year),
-                                rateData: rate.data
-                            });
-                        }
-                    });
-                });
-            });
-
-            if (operations.length === 0) {
-                alert('No rates selected');
-                return;
-            }
-
-            showPreview(operations);
-        }
-
-        function showPreview(operations) {
-            pendingOperations = operations;
-            
-            const summary = document.querySelector('.preview-summary');
-            summary.textContent = `Ready to copy ${operations.length} rate(s). Review and edit rates below before submitting.`;
-            
-            const tbody = document.getElementById('previewTableBody');
-            tbody.innerHTML = '';
-            
-            operations.forEach((op, index) => {
-                const roomType = roomTypesData.find(rt => rt.roomTypeID === op.roomTypeID);
-                const sourceDate = new Date(op.sourceDate + 'T00:00:00');
-                const targetDate = new Date(op.targetDate + 'T00:00:00');
-                
-                const sourceDayName = sourceDate.toLocaleDateString('en-US', { weekday: 'short' });
-                const targetDayName = targetDate.toLocaleDateString('en-US', { weekday: 'short' });
-                
-                const isSourceWeekend = sourceDate.getDay() === 0 || sourceDate.getDay() === 6;
-                const isTargetWeekend = targetDate.getDay() === 0 || targetDate.getDay() === 6;
-                
-                const rateAmount = op.rateData.rate || op.rateData.roomRate || op.rateData.totalRate || 0;
-                
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${roomType.roomTypeName}</td>
-                    <td class="source-date">${formatDate(op.sourceDate)}</td>
-                    <td><span class="day-badge ${isSourceWeekend ? 'weekend' : ''}">${sourceDayName}</span></td>
-                    <td>$${parseFloat(rateAmount).toFixed(2)}</td>
-                    <td class="arrow-cell">→</td>
-                    <td class="target-date">${formatDate(op.targetDate)}</td>
-                    <td><span class="day-badge ${isTargetWeekend ? 'weekend' : ''}">${targetDayName}</span></td>
-                    <td>
-                        <input type="number" 
-                               step="0.01" 
-                               min="0" 
-                               value="${parseFloat(rateAmount).toFixed(2)}"
-                               data-index="${index}"
-                               onchange="updatePendingRate(${index}, this.value)">
-                    </td>
-                `;
-                tbody.appendChild(row);
-            });
-            
-            document.getElementById('previewModal').style.display = 'flex';
         }
 
         function updatePendingRate(index, newRate) {
@@ -781,11 +679,6 @@
                 
                 // Show completion modal
                 showCompletionModal(results);
-                
-                // Clear advanced view selections
-                if (currentView === 'advanced') {
-                    clearAllYears();
-                }
                 
                 // Clear pending operations
                 pendingOperations = [];
